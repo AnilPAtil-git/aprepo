@@ -872,7 +872,11 @@ exit 1`,
     input: {
       serial: "emulator-5554",
       local_path: localFile,
-      device_path: `/data/local/tmp/${"d".repeat(1_126)}`,
+      // Each component stays within the usual 255-byte limit; the whole
+      // path still makes the digest line exceed the former 1 KiB budget.
+      device_path: `/data/local/tmp/${Array.from({ length: 5 }, (_, index) =>
+        String(index).padEnd(220, "d"),
+      ).join("/")}/payload.bin`,
       overwrite: false,
     },
   });
