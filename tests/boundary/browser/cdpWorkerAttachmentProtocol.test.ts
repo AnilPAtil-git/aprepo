@@ -28,19 +28,28 @@ const inspectWithWorkerInventory = async (
   }
 };
 
+/**
+ * A page-owned service worker `TargetInfo`, whose required `attached` flag is
+ * present, `null`, or missing depending on `attachment`.
+ */
+const workerTarget = (
+  origin: string,
+  attachment: "present" | "null" | "omitted" = "present",
+) => ({
+  targetId: "worker-1",
+  type: "service_worker",
+  url: `${origin}/worker.js`,
+  openerId: "allowed-page",
+  ...(attachment === "omitted"
+    ? {}
+    : { attached: attachment === "present" ? true : null }),
+});
+
 it.each(["omitted", "null"] as const)(
   "excludes TargetInfo workers with %s required attached state",
   async (attachmentState) => {
     const value = await inspectWithWorkerInventory((origin) => ({
-      targetInfos: [
-        {
-          targetId: "worker-1",
-          type: "service_worker",
-          url: `${origin}/worker.js`,
-          openerId: "allowed-page",
-          ...(attachmentState === "null" ? { attached: null } : {}),
-        },
-      ],
+      targetInfos: [workerTarget(origin, attachmentState)],
     }));
     expect(value.workers).toEqual([]);
     expect(value.completeness.excluded).toContainEqual({
@@ -71,11 +80,18 @@ it("reports a worker inventory that is not a list as unavailable", async () => {
   });
 });
 
-it("reports a malformed worker inventory entry as an exclusion", async () => {
-  const value = await inspectWithWorkerInventory(() => ({
-    targetInfos: [null],
+it("excludes a malformed worker inventory entry and keeps the ones after it", async () => {
+  const value = await inspectWithWorkerInventory((origin) => ({
+    targetInfos: [null, workerTarget(origin)],
   }));
-  expect(value.workers).toEqual([]);
+  expect(value.workers).toHaveLength(1);
+  expect(value.workers[0]).toMatchObject({
+    target_id: "worker-1",
+    type: "service_worker",
+    attached: true,
+    opener_target_id: "allowed-page",
+    parent_frame_id: null,
+  });
   expect(value.completeness.excluded).toContainEqual({
     section: "workers",
     reason: "invalid_protocol_value",
