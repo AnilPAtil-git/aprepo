@@ -55,6 +55,7 @@ import {
 import { resolveGhidraExtensions } from "./extensions/GhidraExtensions.js";
 import {
   CAPABILITIES,
+  loopbackTransportCapabilities,
   windowsP0Capabilities,
   GHIDRA_PROVIDER_IDENTITY,
   WINDOWS_P0_NATIVE_PE_ARCHITECTURES,
@@ -112,6 +113,13 @@ export class GhidraProvider implements AnalysisProviderCandidate {
   capabilities(): readonly CapabilityDescriptor[] {
     return (this.installationHost?.platform ?? process.platform) === "win32"
       ? windowsP0Capabilities()
+      : this.#posixCapabilities();
+  }
+
+  /** POSIX hosts keep full authority unless loopback was selected explicitly. */
+  #posixCapabilities(): readonly CapabilityDescriptor[] {
+    return this.config.ghidraBridgeTransport === "authenticated-loopback-tcp"
+      ? loopbackTransportCapabilities()
       : CAPABILITIES;
   }
 
@@ -129,7 +137,7 @@ export class GhidraProvider implements AnalysisProviderCandidate {
       availability: this.#availability(installation, readiness),
       capabilities:
         readiness === undefined
-          ? CAPABILITIES
+          ? this.#posixCapabilities()
           : windowsP0Capabilities(readiness),
     };
   }
