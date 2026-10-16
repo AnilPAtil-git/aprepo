@@ -167,7 +167,7 @@ it.skipIf(process.platform === "win32")(
         installation: installed.value,
         operation: "list_procedures",
         arguments: (input) => ["functions", input, "--json"],
-        timeoutMs: 10_000,
+        deadline: { setting: "REA_KUNA_TIMEOUT_MS", ms: 10_000 },
         outputBytes: 1024 * 1024,
         signal: controller.signal,
       });
@@ -243,7 +243,7 @@ it.skipIf(process.platform === "win32")(
         installation: installed.value,
         operation: "list_procedures",
         arguments: (input) => ["functions", input, "--json"],
-        timeoutMs: 10_000,
+        deadline: { setting: "REA_KUNA_TIMEOUT_MS", ms: 10_000 },
         outputBytes: 1024 * 1024,
         signal: controller.signal,
       });
@@ -290,7 +290,7 @@ it.skipIf(process.platform === "win32")(
         installation: installed.value,
         operation: "list_procedures",
         arguments: (input) => ["functions", input, "--json"],
-        timeoutMs: 10_000,
+        deadline: { setting: "REA_KUNA_TIMEOUT_MS", ms: 10_000 },
         outputBytes: 1024 * 1024,
         signal: controller.signal,
       });
@@ -341,7 +341,7 @@ it.skipIf(process.platform === "win32")(
           installation: installed.value,
           operation: "list_procedures",
           arguments: (input) => ["functions", input, "--json"],
-          timeoutMs: 10_000,
+          deadline: { setting: "REA_KUNA_TIMEOUT_MS", ms: 10_000 },
           outputBytes: 1024 * 1024,
           signal: controller.signal,
           releaseRun: () => {
@@ -399,7 +399,7 @@ it.skipIf(process.platform === "win32")(
           installation: installed.value,
           operation: "list_procedures",
           arguments: (input) => ["functions", input, "--json"],
-          timeoutMs: 10_000,
+          deadline: { setting: "REA_KUNA_TIMEOUT_MS", ms: 10_000 },
           outputBytes: 1024 * 1024,
           signal: controller.signal,
         });
