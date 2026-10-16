@@ -9,7 +9,10 @@ import { silentLogger } from "../logger.js";
 import type { Logger } from "pino";
 import { createEvidence } from "../domain/evidence.js";
 import type { Evidence } from "../domain/evidence.js";
-import type { NativeToolName } from "../contracts/native/nativeToolContracts.js";
+import {
+  NATIVE_TOOL_CONTRACTS,
+  type NativeToolName,
+} from "../contracts/native/nativeToolContracts.js";
 import {
   ARTIFACT_ANALYSIS_OPERATIONS,
   type ArtifactAnalysisOperation,
@@ -86,6 +89,11 @@ const ARTIFACT_ANALYSIS_OPERATION_SET: ReadonlySet<string> = new Set(
   ARTIFACT_ANALYSIS_OPERATIONS,
 );
 
+/** Operations served only by the native helper provider, never a deep engine. */
+const NATIVE_TOOL_NAME_SET: ReadonlySet<string> = new Set(
+  NATIVE_TOOL_CONTRACTS.map(({ name }) => name),
+);
+
 /**
  * Open one binary, execute one tool, and always release provider resources.
  * Unlike MCP mode, every CLI invocation is intentionally isolated and does not
@@ -152,7 +160,9 @@ export const runProviderAnalysis = async (
       signal: operationSignal,
       ...(ARTIFACT_ANALYSIS_OPERATION_SET.has(tool)
         ? { createSession: dependencies.createArtifactBinarySession }
-        : {}),
+        : NATIVE_TOOL_NAME_SET.has(tool)
+          ? { createSession: dependencies.createNativeBinarySession }
+          : {}),
     }),
   );
 };
