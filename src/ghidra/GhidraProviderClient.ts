@@ -92,6 +92,7 @@ import {
   GHIDRA_PROVIDER_IDENTITY,
   healthLimitations,
   loopbackTransportLimitations,
+  LOOPBACK_TRANSPORT_EXTENSION_REASON,
   windowsP0Limitations,
   limitationsFor,
 } from "./GhidraProviderCapabilities.js";
@@ -99,7 +100,10 @@ import {
   GHIDRA_STARTUP_DEADLINE_ELAPSED,
   type GhidraSessionError,
 } from "./GhidraSessionError.js";
-import type { GhidraTransportKind } from "./GhidraTransport.js";
+import {
+  resolveGhidraTransport,
+  transportAdmitsAnalysisExtensions,
+} from "./GhidraTransport.js";
 import type { GhidraSessionInfo } from "./GhidraSessionValues.js";
 import { ghidraExtensionFailure } from "./extensions/GhidraExtensionFailures.js";
 import {
@@ -396,6 +400,12 @@ export const createGhidraProviderClient = (input: {
         },
       }),
     );
+  // Windows P0 has only the loopback transport; POSIX keeps the Unix socket
+  // unless the environment selects loopback for hosts that refuse AF_UNIX.
+  const transport = resolveGhidraTransport(
+    installation.platform,
+    config.ghidraBridgeTransport,
+  );
   const prerequisites = ghidraClientPrerequisites(
     target,
     input.profile,
@@ -443,7 +453,8 @@ export const createGhidraProviderClient = (input: {
   if (
     !extensionProfile.success ||
     (config.ghidraNativeAotJar !== undefined &&
-      extensionProfile.data.length === 0)
+      extensionProfile.data.length === 0 &&
+      transportAdmitsAnalysisExtensions(transport))
   )
     return unavailableClient(
       new ProviderAdapterError("ghidra", "open_binary", {
@@ -539,6 +550,7 @@ export const createGhidraProviderClient = (input: {
     config,
     target,
     installation.platform,
+    transport,
   );
   if (invalidProfile !== null)
     return unavailableClient(
@@ -586,12 +598,6 @@ export const createGhidraProviderClient = (input: {
     ...ghidraMipsSharedLimitations(target),
     ...ghidraRiscvLimitations(target),
   ];
-  // Windows P0 has only the loopback transport; POSIX keeps the Unix socket
-  // unless the environment selects loopback for hosts that refuse AF_UNIX.
-  const transport: GhidraTransportKind =
-    installation.platform === "win32"
-      ? "authenticated-loopback-tcp"
-      : (config.ghidraBridgeTransport ?? "unix-socket");
   const providerLimitations = [
     ...(installation.platform === "win32"
       ? windowsP0Limitations
@@ -603,6 +609,12 @@ export const createGhidraProviderClient = (input: {
     ...(installation.platform !== "win32" &&
     transport === "authenticated-loopback-tcp"
       ? loopbackTransportLimitations
+      : []),
+    // A configured extension the loopback transport cannot load is withheld at
+    // profile resolution; name that here so the omission is explicit.
+    ...(config.ghidraNativeAotJar !== undefined &&
+    !transportAdmitsAnalysisExtensions(transport)
+      ? [LOOPBACK_TRANSPORT_EXTENSION_REASON]
       : []),
   ];
   const client = clientFactory({
