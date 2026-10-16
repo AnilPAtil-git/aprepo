@@ -73,7 +73,7 @@ export const withRegularFile = async <Value>(
   let admitted: FileHandle | undefined;
   const operation = async () => {
     try {
-      return await withOwnedRegularFile(
+      const value = await withOwnedRegularFile(
         path,
         {
           ...(signal === undefined ? {} : { signal }),
@@ -97,6 +97,9 @@ export const withRegularFile = async <Value>(
           return value;
         },
       );
+      // Cancellation can arrive during the final metadata checks or close.
+      signal?.throwIfAborted();
+      return value;
     } catch (cause: unknown) {
       if (signal?.aborted === true && cause === signal.reason) throw cause;
       if (
@@ -112,6 +115,7 @@ export const withRegularFile = async <Value>(
       const retry = await retryRegularFileCleanup(cause, resources);
       if (retry.cleanup !== undefined) throw cause;
       if (retry.outcome.kind === "failed") throw retry.outcome.cause;
+      signal?.throwIfAborted();
       return retry.outcome.value;
     }
   };
