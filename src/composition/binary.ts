@@ -44,6 +44,21 @@ export const createManagedBinarySession = (): BinarySession =>
     new ManagedStaticProvider(),
   ]);
 
+/** Compose native helper operations without candidates for deep analysis engines. */
+export const createNativeBinarySession = (
+  selectedEnvironment: Readonly<NodeJS.ProcessEnv>,
+  platform: NodeJS.Platform = process.platform,
+): Promise<BinarySession> =>
+  import("../native/NativeMacOSProvider.js").then(({ NativeMacOSProvider }) =>
+    composeBinarySession(new AnalysisProviderRegistry([]), [
+      new NativeMacOSProvider(
+        snapshotEnvironment(selectedEnvironment, platform),
+        undefined,
+        platform,
+      ),
+    ]),
+  );
+
 /** Compose the artifact operations without candidates for deep analysis engines. */
 export const createArtifactBinarySession = (
   selectedEnvironment: Readonly<NodeJS.ProcessEnv>,

@@ -15,6 +15,10 @@ export interface DirectAnalysisDependencies {
   readonly createArtifactBinarySession: () =>
     | BinarySession
     | Promise<BinarySession>;
+  /** Create a native-helper-only session without selecting deep analysis engines. */
+  readonly createNativeBinarySession: () =>
+    | BinarySession
+    | Promise<BinarySession>;
   readonly createManagedBinarySession: () =>
     | BinarySession
     | Promise<BinarySession>;

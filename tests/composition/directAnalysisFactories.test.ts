@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   runDirectAnalysis,
   runManagedProviderExecution,
+  runProviderAnalysis,
 } from "../../src/application/DirectAnalysis.js";
 import type { DirectAnalysisDependencies } from "../../src/application/DirectAnalysisDependencies.js";
 import type { BinarySession } from "../../src/application/binary/BinarySession.js";
@@ -35,6 +36,7 @@ const recordingFactories = (failure?: Error) => {
     readConfiguration: () => parseConfig({}),
     createBinarySession: createSession,
     createArtifactBinarySession: createSession,
+    createNativeBinarySession: createSession,
     createManagedBinarySession: createSession,
   };
   return { dependencies, sessions, clientsClosed: () => clientsClosed };
@@ -100,4 +102,37 @@ describe("one-shot analysis factory boundary", () => {
     expect(factories.clientsClosed()).toBe(1);
     expect(factories.sessions[0]?.activeTarget()).toBeUndefined();
   });
+
+  it.each(["inspect_macho", "list_architectures", "demangle_swift"] as const)(
+    "runs native helper %s without deep-engine selection",
+    async (tool) => {
+      const [path] = await createBinarySessionTargets();
+      const factories = recordingFactories();
+      let nativeSessions = 0;
+      const nativeDependencies: DirectAnalysisDependencies = {
+        ...factories.dependencies,
+        readConfiguration: () => {
+          throw new Error("deep-engine configuration must stay unused");
+        },
+        createBinarySession: () => {
+          throw new Error("deep-engine factory must stay unused");
+        },
+        createNativeBinarySession: () => {
+          nativeSessions += 1;
+          return factories.dependencies.createNativeBinarySession();
+        },
+      };
+      const result = await runProviderAnalysis(
+        nativeDependencies,
+        path,
+        tool,
+        {},
+      );
+      expect(result).toMatchObject({
+        normalized_result: { operation: tool },
+      });
+      expect(nativeSessions).toBe(1);
+      expect(factories.clientsClosed()).toBe(1);
+    },
+  );
 });
