@@ -10,30 +10,33 @@ import {
 } from "../../../src/contracts/errorSchemas.js";
 import { parseEvidence } from "../../../src/domain/evidence.js";
 
-cliTest.skipIf(process.platform === "win32")(
-  "projects accepted Hopper regex operation through the public CLI with exact bridge request context",
-  async ({ cli }) => {
-    const root = await createTestTempDirectory("rea-hopper-regex-cli-");
-    const launcher = join(root, "fake-hopper.mjs"),
-      target = join(root, "sample");
-    await copyFile(
-      fileURLToPath(
-        new URL("../../fixtures/hopperRegexCliLauncher.mjs", import.meta.url),
-      ),
-      launcher,
-    );
-    await chmod(launcher, 0o700);
-    await copyFile("/usr/bin/true", target);
-    for (const kind of ["strings", "procedures"] as const)
-      for (const mode of [
-        "capability_unavailable",
-        "bridge_exception",
-        "valid",
-      ] as const) {
+for (const kind of ["strings", "procedures"] as const)
+  for (const mode of [
+    "capability_unavailable",
+    "bridge_exception",
+    "valid",
+  ] as const)
+    cliTest.skipIf(process.platform === "win32")(
+      `projects Hopper ${kind} ${mode} through CLI commands and the native bridge with exact request context`,
+      async ({ cli, processes }) => {
+        const root = await createTestTempDirectory("rea-hopper-regex-cli-");
+        const launcher = join(root, "fake-hopper.mjs"),
+          target = join(root, "sample");
+        await copyFile(
+          fileURLToPath(
+            new URL(
+              "../../fixtures/hopperRegexCliLauncher.mjs",
+              import.meta.url,
+            ),
+          ),
+          launcher,
+        );
+        await chmod(launcher, 0o700);
+        await copyFile("/usr/bin/true", target);
         const home = join(root, `${kind}-${mode}`),
           trace = join(home, "trace");
         await mkdir(home);
-        const run = await cli.run({
+        const request = {
           arguments: [
             "search",
             target,
@@ -55,8 +58,29 @@ cliTest.skipIf(process.platform === "win32")(
             REA_TEST_HOPPER_REGEX_MODE: mode,
             REA_TEST_HOPPER_TRACE: trace,
           },
-        });
-        expect(run.stderr).toBe("");
+        };
+        // The Linux production launcher requires a verified Hopper package,
+        // not a Node protocol fixture. Use the existing platform injection at
+        // the composition boundary; retain the public executable on macOS.
+        const result =
+          process.platform === "darwin"
+            ? await cli.run(request)
+            : await processes.run(
+                process.execPath,
+                [
+                  fileURLToPath(
+                    new URL(
+                      "../../fixtures/hopperRegexCliComposition.mjs",
+                      import.meta.url,
+                    ),
+                  ),
+                  ...request.arguments,
+                ],
+                { env: request.environment },
+              );
+        expect(result.stderr).toBe("");
+        expect(result.stdout, JSON.stringify(result)).not.toBe("");
+        const run = { ...result, json: JSON.parse(result.stdout) as unknown };
         expect((await readFile(trace, "utf8")).trim().split("\n")).toEqual([
           "health",
           `list_${kind}`,
@@ -94,6 +118,5 @@ cliTest.skipIf(process.platform === "win32")(
           if (mode === "bridge_exception")
             expect(error.message).toContain(`search_${kind}`);
         }
-      }
-  },
-);
+      },
+    );
