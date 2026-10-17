@@ -1,4 +1,5 @@
 import type { ArtifactInventorySnapshot } from "../../domain/artifactInventorySnapshot.js";
+import { isJsonModuleTarget } from "../../domain/javascript/javascriptModuleResolutionMode.js";
 import type { ApplicationNode } from "../../domain/javascript/javascriptApplicationGraphSchemas.js";
 import { htmlInlineScriptLimitation } from "./JavaScriptArtifactAnalysis.js";
 import {
@@ -17,6 +18,10 @@ import type {
 import type { JavaScriptArtifactGraphAccumulator } from "./JavaScriptArtifactGraphAccumulator.js";
 import {
   addArtifactContainsEdge,
+  applicationManifestPath,
+  applicationContainerIdentity,
+  addApplicationRootCandidate,
+  dependencyManifest,
   addUnavailableStaticParseScope,
   artifactFileNodeKind,
   artifactLocalIdentity,
@@ -36,7 +41,6 @@ import {
   artifactPathResolutionProperties,
   resolveArtifactPathByContext,
 } from "./JavaScriptArtifactPathResolution.js";
-import { compareUnicodeCodePoints } from "../../domain/unicodeCodePointOrder.js";
 
 interface PackageRoleInput {
   readonly packageNode: ApplicationNode;
@@ -478,6 +482,7 @@ export const addJavaScriptPackageNodes = (
             name: packageValue.name,
             version: packageValue.version,
             main: packageValue.main,
+            main_status: packageValue.main_status,
             renderer: packageValue.renderer,
             parse_status: packageValue.status,
           },
@@ -514,6 +519,20 @@ export const addJavaScriptPackageNodes = (
         operation: "inventory-package",
       });
     if (dependencyManifest(file.path)) continue;
+    if (
+      packageValue.status === "included" &&
+      packageValue.main_status === "default"
+    ) {
+      const defaultPath = `${file.path.slice(0, -"package.json".length)}index.js`;
+      const defaultEntry = context.filesByPath.get(defaultPath);
+      if (defaultEntry?.container_sha256 === file.container_sha256)
+        registerPackageEntrypointOwner(context, file, defaultPath);
+      else if (
+        context.unanalyzedFiles?.get(defaultPath)?.container_sha256 ===
+        file.container_sha256
+      )
+        registerPossiblePackageOwner(context, file);
+    }
     addPackageRole(context, {
       packageNode: node,
       packageFile: file,
@@ -529,24 +548,6 @@ export const addJavaScriptPackageNodes = (
   }
   return roots;
 };
-
-/** Dependency-only artifacts retain their inventory root. */
-const applicationManifestPath = (
-  context: JavaScriptArtifactGraphContext,
-): string | undefined =>
-  context.analysis.packages
-    .map(({ path }) => path)
-    .filter(
-      (path) => context.filesByPath.has(path) && !dependencyManifest(path),
-    )
-    .sort(
-      (left, right) =>
-        left.split("/").length - right.split("/").length ||
-        compareUnicodeCodePoints(left, right),
-    )[0];
-
-const dependencyManifest = (path: string): boolean =>
-  path.split("/").slice(0, -1).includes("node_modules");
 
 const createFileTarget = (
   context: JavaScriptArtifactGraphContext,
@@ -645,6 +646,25 @@ const addPackageRole = (
     directoryPaths: context.directoryPaths,
     unanalyzedFiles: context.unanalyzedFiles,
   });
+  if (input.kind === "electron-main") {
+    if (resolution.resolution_status === "resolved")
+      registerPackageEntrypointOwner(
+        context,
+        input.packageFile,
+        resolution.resolved_path,
+      );
+    else if (
+      resolution.resolution_status === "unavailable" &&
+      !(
+        resolution.candidate_path !== undefined &&
+        isJsonModuleTarget(
+          resolution.candidate_path,
+          context.unanalyzedFiles?.get(resolution.candidate_path)?.kind,
+        )
+      )
+    )
+      registerPossiblePackageOwner(context, input.packageFile);
+  }
   const role = createElectronRoleNode(context, {
     kind: input.kind,
     anchor: input.packageFile,
@@ -679,6 +699,37 @@ const addPackageRole = (
     anchor: input.packageFile,
     resolution,
   });
+};
+
+const registerPackageEntrypointOwner = (
+  context: JavaScriptArtifactGraphContext,
+  packageFile: JavaScriptArtifactFile,
+  sourcePath: string,
+): void => {
+  const roots =
+    context.applicationRootsBySource.get(sourcePath) ?? new Set<string>();
+  addApplicationRootCandidate(roots, packageRoot(packageFile));
+  context.applicationRootsBySource.set(sourcePath, roots);
+  if (
+    !context.applicationModuleImportsExamined.has(sourcePath) &&
+    !isJsonModuleTarget(sourcePath, context.filesByPath.get(sourcePath)?.kind)
+  )
+    registerPossiblePackageOwner(context, packageFile);
+};
+
+const packageRoot = (file: JavaScriptArtifactFile): string =>
+  file.path.slice(0, -"package.json".length).replace(/\/$/u, "");
+
+const registerPossiblePackageOwner = (
+  context: JavaScriptArtifactGraphContext,
+  file: JavaScriptArtifactFile,
+): void => {
+  const container = applicationContainerIdentity(context.fileSet, file);
+  const roots =
+    context.applicationPossibleRootsByContainer.get(container) ??
+    new Set<string>();
+  addApplicationRootCandidate(roots, packageRoot(file));
+  context.applicationPossibleRootsByContainer.set(container, roots);
 };
 
 const containerProperties = (container: JavaScriptArtifactContainer) => ({
