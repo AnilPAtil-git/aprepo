@@ -312,9 +312,15 @@ const resolveInternalSpecifier = (
     return packageMainForDirectory(normalized, context) !== undefined
       ? selectPackageMain(normalized, undefined, context, mode)
       : { to: normalized, resolution: "unresolved" };
+  // posix.normalize preserves the specifier's trailing slash while
+  // dirname(match) never carries one; derive the directory identity with path
+  // semantics (joining "." collapses trailing slashes, including ones a regex
+  // would keep behind a line terminator) so a trailing-slash reference still
+  // reaches package-main selection the same way the plain spelling does.
+  const directory = posix.join(normalized, ".");
   const resolvedThroughIndex =
     posix.basename(match).startsWith("index.") &&
-    posix.dirname(match).normalize("NFC") === normalized.normalize("NFC");
+    posix.dirname(match).normalize("NFC") === directory.normalize("NFC");
   return resolvedThroughIndex
     ? selectPackageMain(posix.dirname(match), match, context, mode)
     : { to: match, resolution: "internal" };
