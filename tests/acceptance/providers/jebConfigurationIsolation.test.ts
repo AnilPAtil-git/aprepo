@@ -4,8 +4,20 @@ import { resolve } from "node:path";
 import { expect } from "vitest";
 
 import { parseMcpToolError } from "../../fixtures/mcpToolError.js";
+import type { CliResult } from "../../support/cli/cliFixture.js";
 import { workspaceCliTest as test } from "../../support/cli/workspaceCliFixture.js";
 import type { TestWorkspace } from "../../support/workspace/workspaceFixture.js";
+
+const expectExitCode = (
+  command: string,
+  result: CliResult,
+  expected: number,
+): void => {
+  if (result.exitCode === expected) return;
+  throw new Error(
+    `CLI ${command} exited ${String(result.exitCode)} (signal ${String(result.signal)}); expected ${expected}. stdout=${JSON.stringify(result.stdout)} stderr=${JSON.stringify(result.stderr)}`,
+  );
+};
 
 const isolatedEnvironment = (workspace: TestWorkspace) => ({
   PATH: "",
@@ -35,7 +47,7 @@ test("keeps compiled CLI discovery usable while JEB rejects its malformed timeou
       arguments: [command, "--json"],
       environment,
     });
-    expect(result.exitCode, result.stderr).toBe(0);
+    expectExitCode(command, result, 0);
     expect(result.json).toMatchObject({
       capabilities: expect.arrayContaining([
         expect.objectContaining({
@@ -48,7 +60,7 @@ test("keeps compiled CLI discovery usable while JEB rejects its malformed timeou
     arguments: ["inspect-jeb-client", "--json"],
     environment,
   });
-  expect(refusal.exitCode, refusal.stderr).toBe(1);
+  expectExitCode("inspect-jeb-client", refusal, 1);
   expect(refusal.json).toMatchObject({
     code: "configuration_invalid",
     details: { settings: [{ setting: "REA_JEB_MCP_TIMEOUT_MS" }] },
